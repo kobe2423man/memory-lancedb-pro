@@ -47,6 +47,7 @@ interface PluginConfig {
   autoCapture?: boolean;
   autoRecall?: boolean;
   autoRecallMinLength?: number;
+  autoRecallMinRepeated?: number;
   captureAssistant?: boolean;
   retrieval?: {
     mode?: "hybrid" | "vector";
@@ -633,7 +634,7 @@ async function readSessionConversationForReflection(filePath: string, messageCou
   }
 }
 
-async function readSessionConversationWithResetFallback(sessionFilePath: string, messageCount: number): Promise<string | null> {
+export async function readSessionConversationWithResetFallback(sessionFilePath: string, messageCount: number): Promise<string | null> {
   const primary = await readSessionConversationForReflection(sessionFilePath, messageCount);
   if (primary) return primary;
 
@@ -916,7 +917,11 @@ const CAPTURE_EXCLUDE_PATTERNS = [
 ];
 
 export function shouldCapture(text: string): boolean {
-  const s = text.trim();
+  let s = text.trim();
+
+  // Strip OpenClaw metadata headers (Conversation info or Sender)
+  const metadataPattern = /^(Conversation info|Sender) \(untrusted metadata\):[\s\S]*?\n\s*\n/gim;
+  s = s.replace(metadataPattern, "");
 
   // CJK characters carry more meaning per character, use lower minimum threshold
   const hasCJK = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(
@@ -2315,7 +2320,7 @@ const memoryLanceDBProPlugin = {
   },
 };
 
-function parsePluginConfig(value: unknown): PluginConfig {
+export function parsePluginConfig(value: unknown): PluginConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("memory-lancedb-pro config required");
   }
@@ -2413,6 +2418,7 @@ function parsePluginConfig(value: unknown): PluginConfig {
     // Default OFF: only enable when explicitly set to true.
     autoRecall: cfg.autoRecall === true,
     autoRecallMinLength: parsePositiveInt(cfg.autoRecallMinLength),
+    autoRecallMinRepeated: parsePositiveInt(cfg.autoRecallMinRepeated),
     captureAssistant: cfg.captureAssistant === true,
     retrieval:
       typeof cfg.retrieval === "object" && cfg.retrieval !== null
